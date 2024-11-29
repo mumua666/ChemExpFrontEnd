@@ -1,181 +1,162 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import KspCropper from '@/components/ksp-cropper.vue'
-import type { ResImg } from '@/types/camera'
+import { reactive, ref } from "vue";
+import KspCropper from "@/components/ksp-cropper.vue";
+import type { ResImg } from "@/types/camera";
 
 // 当前拍照所得图片路径
-const photoSrc = ref<string>()
+const photoSrc = ref<string>();
 // 所有裁剪后的图片路径集合
-const photoSrcs = ref<string[]>([])
+const photoSrcs = ref<string[]>([]);
 
 // 拍照按钮点击处理函数
 const takePhoto = async () => {
-  const cameraContext = uni.createCameraContext()
+  // 微信小程序
+  // #ifdef MP-WEIXIN
+  const cameraContext = wx.createCameraContext();
   cameraContext.takePhoto({
-    quality: 'high',
+    quality: "high",
     success: async (res) => {
-      photoSrc.value = res.tempImagePath
+      photoSrc.value = res.tempImagePath;
     },
     fail: (err) => {
-      console.error('拍照失败：', err)
+      console.error("拍照失败：", err);
     },
-  })
-}
+  });
+  // #endif
+
+  // H5/APP端
+  // #ifndef MP-WEIXIN
+  const cameraContext = uni.createCameraContext();
+  cameraContext.takePhoto({
+    quality: "high",
+    success: async (res) => {
+      photoSrc.value = res.tempImagePath;
+    },
+    fail: (err) => {
+      console.error("拍照失败：", err);
+    },
+  });
+  // #endif
+};
+
 // 图片预览处理函数
 const previewImage = (src: string) => {
   uni.previewImage({
     urls: photoSrcs.value,
     current: src,
-  })
-}
+  });
+};
 
 // 相册访问相关权限设置
 function opensit() {
   uni.showModal({
-    content: '由于您还没有允许保存图片到您相册里,这无法进行分享操作点击确定去允许授权',
+    content:
+      "由于您还没有允许保存图片到您相册里,这无法进行分享操作点击确定去允许授权",
     success: function (res) {
       if (res.confirm) {
         /* 这个就是打开设置的API*/
         uni.openSetting({
           success(res) {
-            console.log(res.authSetting)
+            console.log(res.authSetting);
           },
-        })
+        });
       } else if (res.cancel) {
         uni.showModal({
-          cancelText: '依然取消',
-          confirmText: '重新授权',
-          content: '很遗憾你点击了取消，这将无法进行分享操作，请慎重考虑',
+          cancelText: "依然取消",
+          confirmText: "重新授权",
+          content: "很遗憾你点击了取消，这将无法进行分享操作，请慎重考虑",
           success: function (res) {
             if (res.confirm) {
               uni.openSetting({
                 success(res) {
-                  console.log(res.authSetting)
+                  console.log(res.authSetting);
                 },
-              })
+              });
             } else if (res.cancel) {
-              console.log('用户不授权')
+              console.log("用户不授权");
             }
           },
-        })
+        });
       }
     },
-  })
+  });
 }
 
 // 基于YOLO+Flask框架搭建的后台接口实现识别溶液滴定过程
 // 将base64编码的图像转化为临时文件存储
-const localImgs = reactive<string[]>([])
+const localImgs = reactive<string[]>([]);
 const base64ToTempFilePath = (base64data: string) => {
   return new Promise((resolve, reject) => {
-    const fileSystemManager = wx.getFileSystemManager()
-    const timestamp = Date.now()
-    const filePath = `${wx.env.USER_DATA_PATH}/pic_${timestamp}.png`
+    const fileSystemManager = wx.getFileSystemManager();
+    const timestamp = Date.now();
+    const filePath = `${wx.env.USER_DATA_PATH}/pic_${timestamp}.png`;
 
     // 去除可能存在的 Base64 头部信息
-    const cleanBase64Data = base64data.replace(/^data:image\/\w+;base64,/, '')
+    const cleanBase64Data = base64data.replace(/^data:image\/\w+;base64,/, "");
 
     fileSystemManager.writeFile({
       filePath: filePath,
       data: cleanBase64Data,
-      encoding: 'base64',
+      encoding: "base64",
       success: (res) => {
-        // uni.authorize({
-        //   /* 这个就是保存相册的 */
-        //   scope: 'scope.writePhotosAlbum',
-        //   success() {
-        //     /* 保存图片方法 */
-        //     wx.saveImageToPhotosAlbum({
-        //       filePath: filePath,
-        //       success: () => {
-        //         wx.showToast({
-        //           title: '保存成功',
-        //           icon: 'success',
-        //         })
-        //         resolve(filePath)
-        //       },
-        //       fail: (err) => {
-        //         console.error('保存图片到相册失败:', err)
-        //         wx.showToast({
-        //           title: '保存失败',
-        //           icon: 'error',
-        //         })
-        //         reject(err)
-        //       },
-        //     })
-        //   },
-        //   complete(res) {
-        //     console.log(res)
-        //     /* 这里判断一下如果没有授权重新打开设置选项 */
-        //     uni.getSetting({
-        //       success(res) {
-        //         if (!res.authSetting['scope.writePhotosAlbum']) {
-        //           /* 打开设置的方法 */
-        //           opensit()
-        //         }
-        //       },
-        //     })
-        //   },
-        // })
-        resolve(filePath)
+        resolve(filePath);
       },
       fail: (err) => {
-        console.error('写入文件失败:', err)
-        reject(err)
+        console.error("写入文件失败:", err);
+        reject(err);
       },
-    })
-  })
-}
+    });
+  });
+};
 
 const onok = async (ev: any) => {
   // #ifdef MP-WEIXIN
   // 微信小程序端处理
   wx.uploadFile({
-    url: 'https://www.dev.thinkyee.com:3731/predict_image', // 替换为实际的上传 API 接口
+    url: "https://www.dev.thinkyee.com:3731/predict_image", // 替换为实际的上传 API 接口
     filePath: ev.path, // 图片的路径
-    name: 'image', // 对应后台接收文件的字段名
+    name: "image", // 对应后台接收文件的字段名
     formData: {
       // 你可以在这里添加额外的表单数据
     },
     success: (res) => {
-      const resImg: ResImg = JSON.parse(res.data)
-      if (resImg.label.includes('std')) {
-        uni.showToast({ icon: 'loading', title: '标定尚未结束，请继续~' })
-      } else if (resImg.label.includes('start')) {
-        uni.showToast({ icon: 'success', title: '标定已达终点，请停止~' })
-      } else if (resImg.label.includes('ongoing')) {
-        uni.showToast({ icon: 'loading', title: '滴定尚未结束，请继续~' })
-      } else if (resImg.label.includes('edn')) {
-        uni.showToast({ icon: 'success', title: '滴定已达终点，请停止~' })
+      const resImg: ResImg = JSON.parse(res.data);
+      if (resImg.label.includes("std")) {
+        uni.showToast({ icon: "loading", title: "标定尚未结束，请继续~" });
+      } else if (resImg.label.includes("start")) {
+        uni.showToast({ icon: "success", title: "标定已达终点，请停止~" });
+      } else if (resImg.label.includes("ongoing")) {
+        uni.showToast({ icon: "loading", title: "滴定尚未结束，请继续~" });
+      } else if (resImg.label.includes("edn")) {
+        uni.showToast({ icon: "success", title: "滴定已达终点，请停止~" });
       } else {
-        uni.showToast({ icon: 'error', title: '请截取溶液部分~' })
+        uni.showToast({ icon: "error", title: "请截取溶液部分~" });
       }
       // 存储临时文件路径
       base64ToTempFilePath(`${resImg.image}`)
         .then(async (filePath) => {
-          localImgs.push(filePath as string)
+          localImgs.push(filePath as string);
           await wx.previewImage({
             current: filePath as string, // 当前预览的图片
             urls: localImgs, // 预览图片数组
-          })
+          });
           // 将当前拍照图片路径清空，打开拍照模式
-          photoSrc.value = ''
+          photoSrc.value = "";
         })
         .catch((err) => {
-          console.error('Base64 转换失败:', err)
-        })
+          console.error("Base64 转换失败:", err);
+        });
     },
     fail: (err) => {
-      console.error('上传失败', err)
+      console.error("上传失败", err);
     },
-  })
+  });
   // #endif
-}
+};
 
-// 图片裁剪组件 取消 选项处理函数
 const oncancel = () => {
-  photoSrc.value = ''
-}
+  photoSrc.value = "";
+};
 </script>
 
 <template>
@@ -213,7 +194,8 @@ const oncancel = () => {
       @cancel="oncancel"
       @ok="onok"
     ></ksp-cropper>
-    <canvas canvas-id="getImageThemeColorCanvas" id="getImageThemeColorCanvas"> </canvas>
+    <canvas canvas-id="getImageThemeColorCanvas" id="getImageThemeColorCanvas">
+    </canvas>
   </template>
 </template>
 
